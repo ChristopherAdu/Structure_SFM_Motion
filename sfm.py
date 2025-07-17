@@ -65,7 +65,7 @@ class SfmHelpers:
 
         focal_length = 1.2 * max(self.width, self.height)  # heuristic if fx, fy not known
 
-        self.K = np.array([
+        self.k = np.array([
             [focal_length, 0, self.width / 2],
             [0, focal_length, self.height / 2],
             [0, 0, 1]
@@ -73,7 +73,7 @@ class SfmHelpers:
 
         if self.viz:
             print(f"----Intrinsic matrix K set to----")
-            print(self.K)
+            print(self.k)
 
     def match_marker(self, imgd1, imgd2, img1=None, img2=None, kp1=None, kp2=None,
                  min_pts=50, max_ratio=0.6, relax_step=0.05, show_keypoints=False): 
@@ -154,7 +154,7 @@ class SfmHelpers:
 
         return nms_mask, keypoints, descriptors
     
-    def essential_matrix(self, matched_pt1, matched_pt2):
+    def essential_matrix(self, matched_pts1, matched_pts2):
 
         """
         parameters: 
@@ -167,16 +167,88 @@ class SfmHelpers:
         -   RANSAC inlier mask
         """
 
-        E, mask = cv2.findEssentialMat(matched_pts1, matched_pts2, cameraMatrix=self.K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
+        E, mask = cv2.findEssentialMat(matched_pts1, matched_pts2, cameraMatrix=self.k, method=cv2.RANSAC, prob=0.999, threshold=1.0)
 
-        _, R, t, _ = cv2.recoverPose(E, matched_pts1, matched_pts2, self.K)
+        # _, R, t, _ = cv2.recoverPose(E, matched_pts1, matched_pts2, self.k)
 
         if self.viz:
             print("Essential Matrix E:\n", E)
-            print("Recovered Rotation R:\n", R)
-            print("Recovered Translation t:\n", t)
         
-        return E, R, t, mask
+        
+        return E, mask
+    
+    def posesFromE(self, E, img1_inlier_pts, img2_inlier_pts):
+        """
+        Manually decomposes E to (R, t) using SVD + cheirality check
+        """
+        U, _, Vt = np.linalg.svd(E)
+        Y = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
+
+        R1 = U @ Y @ Vt
+        R2 = U @ Y.T @ Vt
+        t1 = U[:, 2]
+        t2 = -U[:, 2]
+
+        Rt_list = [(R1, t1), (R1, t2), (R2, t1), (R2, t2)]
+
+        for i, (R, t) in enumerate(Rt_list):
+            if np.linalg.det(R) < 0:
+                Rt_list[i] = (-R, -t)
+
+        num_pos_pts = []
+        for R, t in Rt_list:
+            P1 = self.k @ np.hstack((np.eye(3), np.zeros((3, 1))))
+            P2 = self.k @ np.hstack((R, t.reshape(3, 1)))
+
+            count = 0
+            for pt1, pt2 in zip(img1_inlier_pts.T, img2_inlier_pts.T):
+                X = cv2.triangulatePoints(P1, P2, pt1.reshape(2, 1), pt2.reshape(2, 1))
+                X /= X[3]
+                X = X[:3]
+                if X[2] > 0 and (R[2] @ (X - t.reshape(3, 1)))[0] > 0:
+                    count += 1
+            num_pos_pts.append(count)
+
+        best_idx = np.argmax(num_pos_pts)
+        R, t = Rt_list[best_idx]
+
+        Tr = np.vstack((np.hstack((R, t.reshape(3,1))), np.array([[0, 0, 0, 1]])))
+
+        p1 = self.k @ np.hstack((np.eye(3), np.zeros((3,1))))
+        p2 = self.k @ np.hstack((R, t.reshape(3,1)))
+
+        return R, t
+    
+    def triangulate_pts(self, pose_c1, pose_c2, filtered_src_pts, filtered_dst_pts):
+        # filtered_src_pts, filtered_dst_pts: shape (N, 2)
+
+        pts_4d_hom = cv2.triangulatePoints(pose_c1, pose_c2, filtered_src_pts.T, filtered_dst_pts.T)
+        pts_3d = pts_4d_hom[:3, :] / pts_4d_hom[3, :]
+
+        # pts_3d shape: (3, N), transpose to (N, 3)
+        pts_3d = pts_3d.T
+
+        print(f"shape of pts_3d before masking = {pts_3d.shape}")
+
+        # Create mask based on positive depth
+        mask = pts_3d[:, 2] > 0
+
+        # Apply mask to points in (N, 2) format
+        img1_pts = filtered_src_pts[mask]
+        img2_pts = filtered_dst_pts[mask]
+        pts_3d = pts_3d[mask]
+
+        print(f"shape of pts_3d after masking = {pts_3d.shape}")
+
+        print(f"Number of points before masking: {pts_3d.shape[0]}")
+        print(f"Number of points passing mask (depth > 0): {np.sum(mask)}")
+
+        return pts_3d, img1_pts, img2_pts
+    
+
+
+    
+
     
 
 
@@ -217,43 +289,79 @@ if __name__ == "__main__":
 
     # Extract SIFT keypoints and descriptors
     sift = cv2.SIFT_create()
-    kp1, imgd1 = sift.detectAndCompute(img1, None)
-    kp2, imgd2 = sift.detectAndCompute(img2, None)
+    kp1, des1 = sift.detectAndCompute(img1, None)
+    kp2, des2 = sift.detectAndCompute(img2, None)
+
+    # 3. Non-Max Suppression
+    _, kp1_nms, des1_nms = sfm.non_max_suppression(kp1, des1)
+    _, kp2_nms, des2_nms = sfm.non_max_suppression(kp2, des2)
+
+
 
     
 
+    
     #Match features and visualize keypoints (inside match_marker)
-    matches, good_matches = sfm.match_marker(imgd1, imgd2,
+    matches, good_matches = sfm.match_marker(des1_nms, des2_nms,
                                             img1=img1, img2=img2,
-                                            kp1=kp1, kp2=kp2,
+                                            kp1=kp1_nms, kp2=kp2_nms,
                                             min_pts=50, max_ratio=0.6,
                                             relax_step=0.05,
                                             show_keypoints=True)
-    # Draw matched image
-    match_img = cv2.drawMatches(img1, kp1, img2, kp2, good_matches, None,
-                            flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
-    
-    _, kp1_nms, imgd1_nms = sfm.non_max_suppression(kp1, imgd1)
-
-    # Optionally, apply NMS to img2 as well
-    _, kp2_nms, imgd2_nms = sfm.non_max_suppression(kp2, imgd2)
 
     img1_nms_viz = cv2.drawKeypoints(img1, kp1_nms, None, color=(255, 0, 0),
                                  flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
     img2_nms_viz = cv2.drawKeypoints(img2, kp2_nms, None, color=(0, 255, 0),
                                  flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
-    # Visualize using class method
-    sfm.viz_images([match_img], titles=["Matched Features"])
-
+    # 5. Visualize Keypoints after NMS
+    img1_nms_viz = cv2.drawKeypoints(img1, kp1_nms, None, color=(255, 0, 0),
+                                     flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    img2_nms_viz = cv2.drawKeypoints(img2, kp2_nms, None, color=(0, 255, 0),
+                                     flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
     sfm.viz_images([img1_nms_viz, img2_nms_viz], titles=["Image 1 (NMS)", "Image 2 (NMS)"])
 
-    # Convert matched keypoints to float arrays
-    matched_pts1 = np.float32([kp1[m.queryIdx].pt for m in good_matches])
-    matched_pts2 = np.float32([kp2[m.trainIdx].pt for m in good_matches])
 
-    E, R, t, inlier_mask = sfm.essential_matrix(matched_pts1, matched_pts2)
 
+    # 6. Draw good matches
+    match_img = cv2.drawMatches(img1, kp1_nms, img2, kp2_nms, good_matches, None,
+                                flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+    sfm.viz_images([match_img], titles=["Matched Features"])
+
+    # 7. Extract matched locations
+    matched_pts1 = np.float32([kp1_nms[m.queryIdx].pt for m in good_matches])
+    matched_pts2 = np.float32([kp2_nms[m.trainIdx].pt for m in good_matches])
+
+    # 8. Compute Essential Matrix and Recover Pose
+    #E, R, t, inlier_mask = sfm.essential_matrix(matched_pts1, matched_pts2)
+    E, inlier_mask = sfm.essential_matrix(matched_pts1, matched_pts2)
+    
+    # Filter inlier points using the inlier_mask
+    matched_pts1_inliers = matched_pts1[inlier_mask.ravel() == 1]
+    matched_pts2_inliers = matched_pts2[inlier_mask.ravel() == 1]
+
+    # Use manual pose estimation
+    R, t= sfm.posesFromE(E, matched_pts1_inliers.T, matched_pts2_inliers.T)
+
+
+    
+
+    print("\nManual posesFromE Output:")
+    print("Rotation R\n", R)
+    print("Translation t:\n", t)
+
+    # 9. Build projection matrices from recovered pose
+    pose_c1 = sfm.k @ np.hstack((np.eye(3), np.zeros((3, 1))))
+    pose_c2 = sfm.k @ np.hstack((R, t.reshape(3, 1)))
+
+    # 10. Transpose inlier points to shape (2, N)
+    # pts1_norm = matched_pts1_inliers.T.astype(np.float32)  # shape (2, N)
+    # pts2_norm = matched_pts2_inliers.T.astype(np.float32)  # shape (2, N)
+
+    # pass points in (N, 2)  
+    pts_3d, img1_valid, img2_valid = sfm.triangulate_pts(pose_c1, pose_c2, matched_pts1_inliers, matched_pts2_inliers)
+
+    print(f"\nTriangulated {pts_3d.shape[0]} 3D points")
 
     plt.show()
   
