@@ -34,12 +34,28 @@ class SfmHelpers:
                 axs[i].axis('off')
             plt.tight_layout()
 
-    def pre_process(self, img, mask=None):
+
+    def pre_process(self, img, create_mask=False):
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         enhanced = clahe.apply(gray)
-        if mask is not None:
+        
+        if create_mask:
+            # Captures reddish-brown Buddha colors
+            lower = np.array([105, 10, 10])
+
+            # Up to white background
+            upper = np.array([255, 255, 255])
+            
+            thresh = cv2.inRange(img, lower, upper)
+            
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20,20))
+            morph = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+            
+            mask = 255 - morph  # Inverts the mask correctly
+            
             enhanced = cv2.bitwise_and(enhanced, enhanced, mask=mask)
+        
         return enhanced
 
     def get_images(self):
@@ -51,7 +67,7 @@ class SfmHelpers:
         imgs= [cv2.imread(os.path.join(self.path,file)) for file in sorted(os.listdir(self.path))]
         
         # comment out the pre_process out put to check the changes in the processed image
-        imgs = [self.pre_process(img) for img in imgs]
+        imgs = [self.pre_process(img, create_mask = True) for img in imgs]
 
         self.viz_images(imgs)
 
@@ -239,9 +255,8 @@ class SfmHelpers:
         pts_3d = pts_3d[mask]
 
         print(f"shape of pts_3d after masking = {pts_3d.shape}")
+        print(f"\nTriangulated {pts_3d.shape[0]} 3D points")
 
-        print(f"Number of points before masking: {pts_3d.shape[0]}")
-        print(f"Number of points passing mask (depth > 0): {np.sum(mask)}")
 
         return pts_3d, img1_pts, img2_pts
     
@@ -361,7 +376,19 @@ if __name__ == "__main__":
     # pass points in (N, 2)  
     pts_3d, img1_valid, img2_valid = sfm.triangulate_pts(pose_c1, pose_c2, matched_pts1_inliers, matched_pts2_inliers)
 
-    print(f"\nTriangulated {pts_3d.shape[0]} 3D points")
+    
+
+    # Convert filtered points (N, 2) to cv2.KeyPoint list
+    kp1_filtered = [cv2.KeyPoint(x=float(pt[0]), y=float(pt[1]), size=3) for pt in img1_valid]
+    kp2_filtered = [cv2.KeyPoint(x=float(pt[0]), y=float(pt[1]), size=3) for pt in img2_valid]
+
+    # Draw keypoints on original images (copy to avoid modifying originals)
+    img1_filtered_kp = cv2.drawKeypoints(img1.copy(), kp1_filtered, None, color=(0, 255, 0), flags=0)
+    img2_filtered_kp = cv2.drawKeypoints(img2.copy(), kp2_filtered, None, color=(0, 255, 0), flags=0)
+
+    # Use your existing viz function to display
+    sfm.viz_images([img1_filtered_kp, img2_filtered_kp], titles=["Image 1 Filtered", "Image 2 Filtered"])
+
 
     plt.show()
   
