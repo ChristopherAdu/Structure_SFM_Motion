@@ -260,6 +260,8 @@ class SfmHelpers:
 
         return pts_3d, img1_pts, img2_pts
     
+    
+    
 
 
     
@@ -388,6 +390,12 @@ if __name__ == "__main__":
 
     # Use your existing viz function to display
     sfm.viz_images([img1_filtered_kp, img2_filtered_kp], titles=["Image 1 Filtered", "Image 2 Filtered"])
+
+    print(f"Original SIFT keypoints: {len(kp1)}, {len(kp2)}")
+    print(f"After NMS: {len(kp1_nms)}, {len(kp2_nms)}")
+    print(f"Good matches: {len(good_matches)}")
+    print(f"After RANSAC (inliers): {len(matched_pts1_inliers)}")
+    print(f"After triangulation: {len(pts_3d)}")
 
 
     plt.show()
