@@ -92,7 +92,7 @@ class SfmHelpers:
             print(self.k)
 
     def match_marker(self, imgd1, imgd2, img1=None, img2=None, kp1=None, kp2=None,
-                 min_pts=50, max_ratio=0.6, relax_step=0.05, show_keypoints=False): 
+                 min_pts=50, max_ratio=0.75, relax_step=0.03, show_keypoints=False): 
         """
         Filters SIFT matches using Lowe's ratio test with adaptive relaxation.
 
@@ -124,9 +124,16 @@ class SfmHelpers:
 
             self.viz_images([vis1, vis2], titles=["Image 1 Keypoints", "Image 2 Keypoints"])
 
+        # using FLANN matcher instead of BFMatcher for better matches 
+        FLANN_INDEX_KDTREE = 1
+        index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=4)
+        search_params = dict(checks=50)
+        flann = cv2.FlannBasedMatcher(index_params, search_params)
         
-        bf = cv2.BFMatcher()
-        matches = bf.knnMatch(imgd1,imgd2,k=2)
+        matches = flann.knnMatch(imgd1, imgd2, k=2)
+        
+        # Filtering  out matches where we don't have 2 nearest neighbors
+        matches = [m for m in matches if len(m) == 2]
 
         ratio = max_ratio
         good_matches = []
@@ -163,7 +170,7 @@ class SfmHelpers:
         for point, index in zip(points_list, mask):
             if binary_mask[point[1], point[0]] == 0:
                 nms_mask.append(index)
-                cv2.circle(binary_mask, tuple(point), 2, 255, -1)
+                cv2.circle(binary_mask, tuple(point), 1, 255, -1)
         
         keypoints = np.array(keypoints)[nms_mask]
         descriptors = np.array(descriptors)[nms_mask]
@@ -260,7 +267,20 @@ class SfmHelpers:
 
         return pts_3d, img1_pts, img2_pts
     
+    def poses_from_pnp(self, pts_3d, pts_2d, k):
+
+        # rvec, tvec: Pose of the 3D points in camera coordinate system
+        success, rvec, t, inliers = cv2.solvePnPRansac(pts_3d, pts_2d, self.k, None)
+         
+        R, _ = cv2.Rodrigues(rvec)
+
+        Tr = np.vstack((np.hstack((R, t.reshape(3,1))), np.array([0, 0, 0, 1])))
+
+        return R, t, Tr 
     
+# class Pointcloud:
+#     def __init__(self,):
+
     
 
 
@@ -294,7 +314,7 @@ if __name__ == "__main__":
     
     path_to_images = "/home/iso/Documents/MATLAB/GIT/Structure_SFM_Motion/buddha_images"
 
-    sfm = SfmHelpers(path=path_to_images, single_img=False, viz=True)
+    sfm = SfmHelpers(path=path_to_images, single_img=True, viz=True)
 
     images = sfm.get_images()
     sfm.set_intrinsics(images)
@@ -306,6 +326,7 @@ if __name__ == "__main__":
 
     # Extract SIFT keypoints and descriptors
     sift = cv2.SIFT_create()
+
     kp1, des1 = sift.detectAndCompute(img1, None)
     kp2, des2 = sift.detectAndCompute(img2, None)
 
@@ -318,12 +339,12 @@ if __name__ == "__main__":
     
 
     
-    #Match features and visualize keypoints (inside match_marker)
+    # 4. Match features and visualize keypoints (inside match_marker)
     matches, good_matches = sfm.match_marker(des1_nms, des2_nms,
                                             img1=img1, img2=img2,
                                             kp1=kp1_nms, kp2=kp2_nms,
-                                            min_pts=50, max_ratio=0.6,
-                                            relax_step=0.05,
+                                            min_pts=150, max_ratio=0.8,
+                                            relax_step=0.02,
                                             show_keypoints=True)
 
     img1_nms_viz = cv2.drawKeypoints(img1, kp1_nms, None, color=(255, 0, 0),
@@ -397,7 +418,13 @@ if __name__ == "__main__":
     print(f"After RANSAC (inliers): {len(matched_pts1_inliers)}")
     print(f"After triangulation: {len(pts_3d)}")
 
+    R_pnp, t_pnp,T_pnp = sfm.poses_from_pnp(pts_3d, img2_valid, sfm.k)
+    print("PnP R: Rotates world points to align with camera\n", R_pnp)
+    print("PnP t: Translates world points to camera origin\n", t_pnp)
+    print("PnP Transformation:\n", T_pnp)
 
     plt.show()
   
+
+
         
