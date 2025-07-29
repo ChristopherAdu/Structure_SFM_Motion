@@ -801,54 +801,80 @@ def main():
     pts_3d_plot = np.array([point for point in track_manager.tracks.keys()])
     print(f"Number of 3D points in the point cloud = {len(pts_3d_plot)}")
     
+    # # Simple matplotlib visualization
+    # if len(pts_3d_plot) > 0:
+    #     fig = plt.figure(figsize=(15, 5))
+        
+    #     # Plot 1: 3D view with cameras
+    #     ax1 = fig.add_subplot(111, projection='3d')
+    #     ax1.scatter(pts_3d_plot[:, 0], pts_3d_plot[:, 1], pts_3d_plot[:, 2], c='black', s=1)
+        
+    #     # Plot camera positions with smaller markers
+    #     for i, pose in enumerate(track_manager.camera_poses):
+    #         if len(pose.shape) == 2 and pose.shape == (4, 4):
+    #             # Extract translation from 4x4 matrix
+    #             t = pose[:3, 3]
+    #             ax1.scatter(t[0], t[1], t[2], c='red', s=20, marker='o')
+    #             ax1.text(t[0], t[1], t[2], f'C{i}', fontsize=6, color='black')
+        
+    #     ax1.set_xlabel('X')
+    #     ax1.set_ylabel('Y')
+    #     ax1.set_zlabel('Z')
+    #     ax1.set_title('3D Reconstruction with Cameras')
+
+        
     # Simple matplotlib visualization
     if len(pts_3d_plot) > 0:
         fig = plt.figure(figsize=(15, 5))
         
         # Plot 1: 3D view with cameras
-        ax1 = fig.add_subplot(131, projection='3d')
-        ax1.scatter(pts_3d_plot[:, 0], pts_3d_plot[:, 1], pts_3d_plot[:, 2], c='blue', s=1)
+        ax1 = fig.add_subplot(111, projection='3d')
         
+        # Plot 3D points
+        ax1.scatter(pts_3d_plot[:, 0], pts_3d_plot[:, 1], pts_3d_plot[:, 2], c='black', s=1)
+
         # Plot camera positions with smaller markers
         for i, pose in enumerate(track_manager.camera_poses):
             if len(pose.shape) == 2 and pose.shape == (4, 4):
-                # Extract translation from 4x4 matrix
                 t = pose[:3, 3]
                 ax1.scatter(t[0], t[1], t[2], c='red', s=20, marker='o')
                 ax1.text(t[0], t[1], t[2], f'C{i}', fontsize=6, color='black')
+
+        # --- Remove axes and background ---
+        ax1.set_axis_off()  # Removes axis lines and ticks
+        ax1.grid(False)     # Removes grid
+        ax1.set_title('')   # Optional: remove title
+        fig.patch.set_facecolor('white')  # Optional: ensure white background
+
         
-        ax1.set_xlabel('X')
-        ax1.set_ylabel('Y')
-        ax1.set_zlabel('Z')
-        ax1.set_title('3D Reconstruction with Cameras')
         
-        # Plot 2: Top view (XY) - Rotated 180 degrees clockwise
-        ax2 = fig.add_subplot(132)
-        # Rotate 180 degrees clockwise: (x,y) -> (-x,-y)
-        ax2.scatter(-pts_3d_plot[:, 0], -pts_3d_plot[:, 1], c='blue', s=1)
-        for i, pose in enumerate(track_manager.camera_poses):
-            if len(pose.shape) == 2 and pose.shape == (4, 4):
-                t = pose[:3, 3]
-                ax2.scatter(-t[0], -t[1], c='red', s=15, marker='o')
-                ax2.text(-t[0], -t[1], f'C{i}', fontsize=6)
-        ax2.set_xlabel('X (rotated)')
-        ax2.set_ylabel('Y (rotated)')
-        ax2.set_title('Top View (XY) - 180° Rotated')
-        ax2.grid(True)
-        ax2.axis('equal')
+        # # Plot 2: Top view (XY) - Rotated 180 degrees clockwise
+        # ax2 = fig.add_subplot(132)
+        # # Rotate 180 degrees clockwise: (x,y) -> (-x,-y)
+        # ax2.scatter(-pts_3d_plot[:, 0], -pts_3d_plot[:, 1], c='blue', s=1)
+        # for i, pose in enumerate(track_manager.camera_poses):
+        #     if len(pose.shape) == 2 and pose.shape == (4, 4):
+        #         t = pose[:3, 3]
+        #         ax2.scatter(-t[0], -t[1], c='red', s=15, marker='o')
+        #         ax2.text(-t[0], -t[1], f'C{i}', fontsize=6)
+        # ax2.set_xlabel('X (rotated)')
+        # ax2.set_ylabel('Y (rotated)')
+        # ax2.set_title('Top View (XY) - 180° Rotated')
+        # ax2.grid(True)
+        # ax2.axis('equal')
         
-        # Plot 3: Side view (XZ)
-        ax3 = fig.add_subplot(133)
-        ax3.scatter(pts_3d_plot[:, 0], pts_3d_plot[:, 2], c='blue', s=1)
-        for i, pose in enumerate(track_manager.camera_poses):
-            if len(pose.shape) == 2 and pose.shape == (4, 4):
-                t = pose[:3, 3]
-                ax3.scatter(t[0], t[2], c='red', s=15, marker='o')
-                ax3.text(t[0], t[2], f'C{i}', fontsize=6)
-        ax3.set_xlabel('X')
-        ax3.set_ylabel('Z (Depth)')
-        ax3.set_title('Side View (XZ)')
-        ax3.grid(True)
+        # # Plot 3: Side view (XZ)
+        # ax3 = fig.add_subplot(133)
+        # ax3.scatter(pts_3d_plot[:, 0], pts_3d_plot[:, 2], c='blue', s=1)
+        # for i, pose in enumerate(track_manager.camera_poses):
+        #     if len(pose.shape) == 2 and pose.shape == (4, 4):
+        #         t = pose[:3, 3]
+        #         ax3.scatter(t[0], t[2], c='red', s=15, marker='o')
+        #         ax3.text(t[0], t[2], f'C{i}', fontsize=6)
+        # ax3.set_xlabel('X')
+        # ax3.set_ylabel('Z (Depth)')
+        # ax3.set_title('Side View (XZ)')
+        # ax3.grid(True)
         
         plt.tight_layout()
         plt.show()
