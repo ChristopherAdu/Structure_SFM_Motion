@@ -28,19 +28,22 @@ class SfmHelpers:
         if self.single_img:  # to see the changes on the single image 
             fig, ax = plt.subplots(figsize=(4, 4))
             ax.imshow(cv2.cvtColor(imgs[0], cv2.COLOR_BGR2RGB))
-            ax.set_title(titles[0] if titles else "Image 1", fontsize=10)
+            ax.set_title(titles[0] if titles else "Image 1", fontsize=24)
             ax.axis('off')
         else:    # to see the changes on all images
-            fig, axs = plt.subplots(1, len(imgs), figsize=(4 * len(imgs), 4))
+            fig, axs = plt.subplots(1, len(imgs),figsize=(2 * len(imgs), 6))
 
             if len(imgs) == 1:
                 axs = [axs]
 
             for i in range(len(imgs)):
                 axs[i].imshow(cv2.cvtColor(imgs[i], cv2.COLOR_BGR2RGB))
-                axs[i].set_title(titles[i] if titles else f"Image {i+1}", fontsize=8)
+                axs[i].set_title(titles[i] if titles else f"Image {i+1}", fontsize=10)
+
+
                 axs[i].axis('off')
-            plt.tight_layout()
+            # plt.tight_layout()
+            plt.subplots_adjust(wspace=0.1, hspace=0) 
 
 
     def pre_process(self, img, create_mask=False):
@@ -153,6 +156,7 @@ class SfmHelpers:
 
         returns: nms_mask id's and filtered keypoints and descriptors 
         """
+        
         binary_mask = np.zeros((self.height, self.width), dtype=np.uint8)
         response = np.array([kp.response for kp in keypoints])
         mask = np.flip(np.argsort(response))  # highest response first
@@ -239,7 +243,7 @@ class SfmHelpers:
 
         return R, t
     
-    # Additional helper function to add to your SfmHelpers class:
+    
     def triangulate_pts(self, pose_c1, pose_c2, filtered_src_pts, filtered_dst_pts):
         """
         Simplified triangulation like ideal code - only filter by positive depth
@@ -253,7 +257,7 @@ class SfmHelpers:
         pts_3d = pts_4d_hom/pts_4d_hom[3,:]
         pts_3d = pts_3d[:3,:]
 
-        # ONLY filter by positive depth - like ideal code
+        # ONLY filter by positive depth 
         mask = pts_3d[2, :] > 0
         pts_3d = pts_3d[:, mask]
         img1_pts = filtered_src_pts[mask]
@@ -263,30 +267,7 @@ class SfmHelpers:
         
         return pts_3d.T, img1_pts, img2_pts
         
-    # def triangulate_pts(self, pose_c1, pose_c2, filtered_src_pts, filtered_dst_pts):
-    #     # filtered_src_pts, filtered_dst_pts: shape (N, 2)
-
-    #     pts_4d_hom = cv2.triangulatePoints(pose_c1, pose_c2, filtered_src_pts.T, filtered_dst_pts.T)
-    #     pts_3d = pts_4d_hom[:3, :] / pts_4d_hom[3, :]
-
-    #     # pts_3d shape: (3, N), transpose to (N, 3)
-    #     pts_3d = pts_3d.T
-
-    #     print(f"shape of pts_3d before masking = {pts_3d.shape}")
-
-    #     # Create mask based on positive depth
-    #     mask = pts_3d[:, 2] > 0
-
-    #     # Apply mask to points in (N, 2) format
-    #     img1_pts = filtered_src_pts[mask]
-    #     img2_pts = filtered_dst_pts[mask]
-    #     pts_3d = pts_3d[mask]
-
-    #     print(f"shape of pts_3d after masking = {pts_3d.shape}")
-    #     print(f"\nTriangulated {pts_3d.shape[0]} 3D points")
-
-
-    #     return pts_3d, img1_pts, img2_pts
+   
     
     def poses_from_pnp(self, pts_3d, pts_2d, k):
 
@@ -316,9 +297,7 @@ class TrackManager:
             track_found = False
             for track_key in self.tracks:
                 if img1_pair in self.tracks[track_key] or img2_pair in self.tracks[track_key]:
-                    print("Track found. Printing current and existing 3d point for comparison")
-                    print(tuple(p3d))
-                    print(track_key)
+                
 
                     if img1_pair not in self.tracks[track_key]:
                         self.tracks[track_key].append(img1_pair)
@@ -365,53 +344,19 @@ class TrackManager:
                     
         return np.array(match_3d), np.array(match_2d)
     
-    
-    # def plot_scene(self):
-    #     fig = plt.figure(figsize=(10, 8))
-    #     ax = fig.add_subplot(111, projection='3d')
-
-    #     pts_3d = np.array([np.array(p) for p in self.tracks.keys()], dtype=np.float64)
-
-    #     ax.scatter(pts_3d[:, 0], pts_3d[:, 1], pts_3d[:, 2], c='blue', s=3, label='Triangulated Points')
-
-    #     for i, (R, t) in enumerate(self.camera_poses):
-    #         C = (-R.T @ t).reshape(-1)
-    #         ax.scatter(C[0], C[1], C[2], c='red', marker='o', s=40)
-    #         ax.text(C[0], C[1], C[2], f'C{i}', color='black')
-
-    #         cam_dir = (R.T @ np.array([0, 0, 1])).reshape(-1)
-    #         ax.quiver(C[0], C[1], C[2], cam_dir[0], cam_dir[1], cam_dir[2],
-    #                 length=0.05, color='green')
-
-    #     ax.set_title('3D Scene with Triangulated Points and Camera Poses')
-    #     ax.set_xlabel('X')
-    #     ax.set_ylabel('Y')
-    #     ax.set_zlabel('Z')
-    #     ax.legend()
-    #     ax.grid(True)
-    #     plt.tight_layout()
-    #     plt.show()
-
-    #     ax.legend()
-    #     ax.grid(True)
-    #     plt.tight_layout()
-    #     plt.show()
     def addPoints_tracks(self, pts_3d, img1_pts, img2_pts, pose_idx1, pose_idx2):
         self.tracks = []
         for P3d, img1_pt, img2_pt in zip(pts_3d, img1_pts, img2_pts):
             p = Point3(np.array(P3d))
             track = SfmTrack(p)
             trackPoints = [tuple(t.p) for t in self.tracks]
-            if tuple(track.p) not in trackPoints:                                        # Possible error in result since triangulated 3d point can be different
+            if tuple(track.p) not in trackPoints:  # Possible error in result since triangulated 3d point can be different
                 track.addMeasurement(pose_idx1, Point2(np.array(img1_pt)))
                 # print("Added new track")
                 track.addMeasurement(pose_idx2, Point2(np.array(img2_pt)))
                 # print("Added new track")
                 self.tracks.append(track)
-                # print("=======================================",tuple(track.p))
-                # print(track.measurementMatrix())
-                # print(track.measurement(0))
-                # print("Added new track=============================================")
+               
             
             else:
                 track = self.tracks[trackPoints.index(tuple(track.p))]
@@ -483,13 +428,13 @@ class Plotter:
         using plotly to plot the 3d points and camera points in a 3d plot
         """
 
-        total_colors = np.zeros((1,3))
+        
         x = self.points_3d[:,0]
         y = self.points_3d[:,1]
         z = self.points_3d[:,2]
 
         fig = go.Figure()
-        scatter = fig.add_trace(go.Scatter3d(x=[x], y=[y], z=[z], mode='markers', marker = dict(size=1.2, color=total_colors/25)))
+        scatter = fig.add_trace(go.Scatter3d(x=x, y=y, z=z, mode='markers', marker = dict(size=1.2, color= 'black')))
 
         # Plot camera poses
 
@@ -606,19 +551,23 @@ class Plotter:
 class GtsamOptimiser:
     def __init__(self, pc, k):
         self.pc = pc
-        self.k = k  # Fixed: was self.K
+        self.k = k  
 
         # Create factor graph and initialize estimates
         self.graph = NonlinearFactorGraph()
-        self.initial_estimate = Values()  # Fixed: was values() - should be Values()
+        self.initial_estimate = Values()  
 
     def initialize_factor_graph(self):
         L = gtsam.symbol_shorthand.L
         X = gtsam.symbol_shorthand.X
 
+        # Track which landmarks are included
+        self.landmark_mapping = {}  # Maps original track index to factor graph index
+    
+
         # Extract relevant values from K to construct gtsam camera calibration parameters
         gtsam_K = Cal3_S2(
-            self.k[0, 0],  # fx - focal length x (Fixed: was self.K)
+            self.k[0, 0],  # fx - focal length x 
             self.k[1, 1],  # fy - focal length y 
             0.0,           # skew (usually 0)
             self.k[0, 2],  # cx - principal point x
@@ -626,66 +575,106 @@ class GtsamOptimiser:
         )
 
         # How much do we trust pixel measurements?
-        measurement_noise = noiseModel.Isotropic.Sigma(2, 10.0)  # ± 10 pixels uncertainty
+        measurement_noise = noiseModel.Isotropic.Sigma(2, 100.0)  
 
         # Fix the first camera pose to prevent solution from drifting in space
         pose_noise = noiseModel.Diagonal.Sigmas(
-            np.array([0.3, 0.3, 0.3,  # ±0.3 rad on roll,pitch,yaw    
+            np.array([0.50, 0.5, 0.5,  # ±0.3 rad on roll,pitch,yaw    
                       0.1, 0.1, 0.1])  # ±0.1m on x,y,z 
         )
         
         # CONSTRAINT: "First camera is approximately here" 
         factor = PriorFactorPose3(
             X(0),  # First camera pose 
-            Pose3(self.pc.gtsam_camera_poses[0]),  # Initial guess 
+            Pose3(self.pc.camera_poses[0]),  # Initial guess 
             pose_noise  # How certain we are 
         ) 
         self.graph.push_back(factor)
 
         # Add initial estimates for camera poses
-        for i, pose in enumerate(self.pc.gtsam_camera_poses):
+        for i, pose in enumerate(self.pc.camera_poses):
             self.initial_estimate.insert(X(i), Pose3(pose))
 
         # FOR EACH 3D LANDMARK that was tracked 
-        i = 0
-        for point, measurements in self.pc.tracks.items(): 
-            # FOR EACH CAMERA that saw this landmark
-            for j, measurement in enumerate([measurements[k][1] for k in range(len(measurements))]):
-                # CREATE CONSTRAINT: "Landmark L(i) should project to pixel 'measurement' 
-                # when viewed from camera X(camera_id)"
-                factor = GenericProjectionFactorCal3_S2(
-                    Point2(np.array(measurement)),  # OBSERVED pixel
-                    measurement_noise,              # Trust level
-                    X(measurements[j][0]),          # Camera pose 
-                    L(i),                          # Landmark position
-                    gtsam_K                        # Camera model
-                )
-                self.graph.push_back(factor)
+        valid_landmarks = 0
+        skipped_landmarks = 0
+        for track_idx, (point, measurements) in enumerate(self.pc.tracks.items()):
+            point_array = np.array(point)
             
-            # Add initial estimate for this landmark
-            self.initial_estimate.insert(L(i), Point3(np.array(point)))
-            i += 1
+            # Skip landmarks that are too close/far or have few observations
+            if len(measurements) < 2 or point_array[2] <= 0.05 or point_array[2] > 10:
+                skipped_landmarks += 1
+                continue
+            
+            try:
+                # Add projection factors for each measurement
+                for measurement_data in measurements:
+                    camera_id = measurement_data[0]  # Extract camera index
+                    pixel_coords = measurement_data[1]  # Extract pixel coordinates
+                    
+                    # Skip if camera index is invalid
+                    if camera_id >= len(self.pc.camera_poses):
+                        continue
+                        
+                    factor = GenericProjectionFactorCal3_S2(
+                        Point2(np.array(pixel_coords)),  # OBSERVED pixel
+                        measurement_noise,               # Trust level
+                        X(camera_id),                   # Camera pose 
+                        L(valid_landmarks),             # Landmark position
+                        gtsam_K                         # Camera model
+                    )
+                    self.graph.push_back(factor)
+                
+                # Add initial estimate for this landmark
+                self.initial_estimate.insert(L(valid_landmarks), Point3(point_array))
+                # Store the mapping
+                self.landmark_mapping[track_idx] = valid_landmarks
+                valid_landmarks += 1
+                
+            except Exception as e:
+                skipped_landmarks += 1
+                continue
 
-        print(f"Added {i} landmarks to factor graph")
+        print(f"Added {valid_landmarks} landmarks to factor graph")
+        print(f"Skipped {skipped_landmarks} problematic landmarks")
 
-        # Add prior on the position of the first landmark to fix scale
-        point_noise = gtsam.noiseModel.Isotropic.Sigma(3, 1)
-        factor = PriorFactorPoint3(
-            L(0), 
-            Point3(np.array(list(self.pc.tracks.keys())[0])),  # Fixed: convert to Point3
-            point_noise
-        )
-        self.graph.push_back(factor)  
+        if valid_landmarks > 0:
+            point_noise = gtsam.noiseModel.Isotropic.Sigma(3, 0.1)  
+            factor = PriorFactorPoint3(
+                L(0), 
+                Point3(np.array(list(self.pc.tracks.keys())[0])),
+                point_noise
+            )
+            self.graph.push_back(factor)  
 
         print(f"Total factors in graph: {self.graph.size()}")
         print(f"Total variables: {self.initial_estimate.size()}")
 
         return self.graph, self.initial_estimate, L, X
 
+
+        # # Add prior on the position of the first landmark to fix scale
+        # point_noise = gtsam.noiseModel.Isotropic.Sigma(3, 1)
+        # factor = PriorFactorPoint3(
+        #     L(0), 
+        #     Point3(np.array(list(self.pc.tracks.keys())[0])),  # Fixed: convert to Point3
+        #     point_noise
+        # )
+        # self.graph.push_back(factor)  
+
+        # print(f"Total factors in graph: {self.graph.size()}")
+        # print(f"Total variables: {self.initial_estimate.size()}")
+
+        # return self.graph, self.initial_estimate, L, X
+
     def optimize(self):
         # Configure optimizer parameters
         params = gtsam.LevenbergMarquardtParams()
         params.setVerbosityLM("SUMMARY")
+        params.setMaxIterations(30)           # Limit iterations
+        params.setRelativeErrorTol(1e-5)      # Reasonable tolerance
+        params.setAbsoluteErrorTol(1e-5)      # Reasonable tolerance
+        
         
         # Create optimizer
         optimizer = gtsam.LevenbergMarquardtOptimizer(
@@ -694,11 +683,15 @@ class GtsamOptimiser:
             params
         )
         
-        # Run optimization
-        result = optimizer.optimize()
-        
-        return result
-    
+        # run optimiser
+        try:
+            result = optimizer.optimize()
+            return result
+        except Exception as e:
+            print(f"Optimization failed: {e}")
+            print("Returning initial estimates...")
+            return self.initial_estimate
+
 
 def main():
     """
@@ -801,52 +794,26 @@ def main():
     pts_3d_plot = np.array([point for point in track_manager.tracks.keys()])
     print(f"Number of 3D points in the point cloud = {len(pts_3d_plot)}")
     
-    # # Simple matplotlib visualization
-    # if len(pts_3d_plot) > 0:
-    #     fig = plt.figure(figsize=(15, 5))
-        
-    #     # Plot 1: 3D view with cameras
-    #     ax1 = fig.add_subplot(111, projection='3d')
-    #     ax1.scatter(pts_3d_plot[:, 0], pts_3d_plot[:, 1], pts_3d_plot[:, 2], c='black', s=1)
-        
-    #     # Plot camera positions with smaller markers
-    #     for i, pose in enumerate(track_manager.camera_poses):
-    #         if len(pose.shape) == 2 and pose.shape == (4, 4):
-    #             # Extract translation from 4x4 matrix
-    #             t = pose[:3, 3]
-    #             ax1.scatter(t[0], t[1], t[2], c='red', s=20, marker='o')
-    #             ax1.text(t[0], t[1], t[2], f'C{i}', fontsize=6, color='black')
-        
-    #     ax1.set_xlabel('X')
-    #     ax1.set_ylabel('Y')
-    #     ax1.set_zlabel('Z')
-    #     ax1.set_title('3D Reconstruction with Cameras')
-
-        
     # Simple matplotlib visualization
     if len(pts_3d_plot) > 0:
         fig = plt.figure(figsize=(15, 5))
         
         # Plot 1: 3D view with cameras
         ax1 = fig.add_subplot(111, projection='3d')
-        
-        # Plot 3D points
         ax1.scatter(pts_3d_plot[:, 0], pts_3d_plot[:, 1], pts_3d_plot[:, 2], c='black', s=1)
-
+        
         # Plot camera positions with smaller markers
         for i, pose in enumerate(track_manager.camera_poses):
             if len(pose.shape) == 2 and pose.shape == (4, 4):
+                # Extract translation from 4x4 matrix
                 t = pose[:3, 3]
                 ax1.scatter(t[0], t[1], t[2], c='red', s=20, marker='o')
                 ax1.text(t[0], t[1], t[2], f'C{i}', fontsize=6, color='black')
-
-        # --- Remove axes and background ---
-        ax1.set_axis_off()  # Removes axis lines and ticks
-        ax1.grid(False)     # Removes grid
-        ax1.set_title('')   # Optional: remove title
-        fig.patch.set_facecolor('white')  # Optional: ensure white background
-
         
+        ax1.set_xlabel('X')
+        ax1.set_ylabel('Y')
+        ax1.set_zlabel('Z')
+        ax1.set_title('3D Reconstruction with Cameras')
         
         # # Plot 2: Top view (XY) - Rotated 180 degrees clockwise
         # ax2 = fig.add_subplot(132)
@@ -888,10 +855,10 @@ def main():
         # GTSAM optimization
         optimizer = GtsamOptimiser(track_manager, sfm.k)
         graph, initial_estimate, L, X = optimizer.initialize_factor_graph()
-        print('Initial Error = {}'.format(graph.error(initial_estimate)))
+        # print('Initial Error = {}'.format(graph.error(initial_estimate)))
 
         result = optimizer.optimize()
-        print('Final Error = {}'.format(graph.error(result)))
+        # print('Final Error = {}'.format(graph.error(result)))
 
         # Extract optimized results
         optimized_pt_cloud = []
@@ -922,9 +889,6 @@ def main():
 if __name__ == "__main__":
     track_manager, optimizer, result = main()
 
-
-
-    
 
     
 
