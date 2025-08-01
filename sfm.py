@@ -798,7 +798,7 @@ def main():
     if len(pts_3d_plot) > 0:
         fig = plt.figure(figsize=(15, 5))
         
-        # Plot 1: 3D view with cameras
+        # 3D view with cameras
         ax1 = fig.add_subplot(111, projection='3d')
         ax1.scatter(pts_3d_plot[:, 0], pts_3d_plot[:, 1], pts_3d_plot[:, 2], c='black', s=1)
         
